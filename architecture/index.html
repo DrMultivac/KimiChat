@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KIMI MSK Agent — RevelAi Health</title>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --purple: #3C308C;
+    --purple-dark: #1D196B;
+    --purple-light: #F1F0F8;
+    --purple-extra-light: #E8E6F5;
+    --yellow: #FEBC11;
+    --yellow-light: #FFF3D9;
+    --bg-primary: #FAFAFE;
+    --bg-warm: #FFFAEE;
+    --bg-white: #FFFFFF;
+    --text-headline: #1D196B;
+    --text-body: #374151;
+    --text-muted: #6B7280;
+    --text-light: #9CA3AF;
+    --success: #10B981;
+    --success-light: #DCFCE7;
+    --warning: #F59E0B;
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Source Sans Pro', 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary); color: var(--text-body);
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+
+  /* Nav */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(250,250,254,0.92); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--purple-extra-light);
+    padding: 0 40px; display: flex; justify-content: space-between; align-items: center; height: 64px;
+  }
+  .nav-brand { display: flex; align-items: center; gap: 10px; }
+  .nav-logo { font-size: 22px; font-weight: 700; color: var(--purple-dark); letter-spacing: -0.5px; }
+  .nav-logo span { color: var(--purple); }
+  .nav-divider { width: 1px; height: 24px; background: var(--purple-extra-light); }
+  .nav-product { font-size: 14px; color: var(--text-muted); font-weight: 500; }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a {
+    color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500;
+    transition: color 0.2s; padding: 4px 0;
+  }
+  .nav-links a:hover { color: var(--purple); }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, var(--purple) 0%, var(--purple-dark) 100%);
+    padding: 80px 40px 70px; text-align: center; position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: -50%; right: -20%; width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(254,188,17,0.08) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero::after {
+    content: ''; position: absolute; bottom: -30%; left: -10%; width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-content { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; }
+  .hero .label {
+    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 2px; color: var(--yellow); margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 52px; font-weight: 700; color: #fff; margin-bottom: 16px; line-height: 1.15;
+    letter-spacing: -0.5px;
+  }
+  .hero h1 em { font-style: normal; color: var(--yellow); }
+  .hero p { font-size: 18px; color: rgba(255,255,255,0.7); max-width: 600px; margin: 0 auto 32px; line-height: 1.7; }
+  .hero-ctas { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 32px; background: var(--yellow); color: var(--purple-dark);
+    font-size: 16px; font-weight: 600; border-radius: 30px; text-decoration: none;
+    border: none; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(254,188,17,0.4); }
+  .btn-secondary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 32px; background: transparent; color: #fff;
+    font-size: 16px; font-weight: 500; border-radius: 30px; text-decoration: none;
+    border: 2px solid rgba(255,255,255,0.4); transition: all 0.2s;
+  }
+  .btn-secondary:hover { border-color: #fff; background: rgba(255,255,255,0.08); }
+
+  /* Sparkle accents */
+  .sparkle { position: absolute; color: var(--yellow); opacity: 0.4; font-size: 14px; }
+  .sparkle-1 { top: 30%; left: 15%; font-size: 18px; }
+  .sparkle-2 { top: 20%; right: 18%; font-size: 12px; }
+  .sparkle-3 { bottom: 25%; right: 12%; font-size: 16px; }
+  .sparkle-4 { bottom: 30%; left: 20%; font-size: 10px; }
+
+  /* Stats */
+  .stats-bar {
+    display: flex; justify-content: center; gap: 48px; padding: 48px 40px;
+    flex-wrap: wrap; background: var(--bg-white);
+    border-bottom: 1px solid var(--purple-extra-light);
+  }
+  .stat { text-align: center; }
+  .stat .num { font-size: 40px; font-weight: 700; color: var(--purple); line-height: 1; }
+  .stat .num.highlight { color: var(--yellow); }
+  .stat .label-text { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; font-weight: 600; }
+
+  /* Sections */
+  .section { max-width: 1100px; margin: 0 auto; padding: 64px 40px; }
+  .section-header { margin-bottom: 40px; }
+  .section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 2px; color: var(--purple); margin-bottom: 8px;
+  }
+  .section-header h2 { font-size: 32px; font-weight: 700; color: var(--text-headline); margin-bottom: 8px; line-height: 1.25; }
+  .section-header p { font-size: 16px; color: var(--text-muted); max-width: 600px; }
+
+  /* Explore cards */
+  .explore-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .explore-card {
+    background: var(--bg-white); border-radius: 16px; padding: 32px;
+    box-shadow: var(--shadow-md); transition: all 0.3s; text-decoration: none;
+    display: flex; flex-direction: column; position: relative; overflow: hidden;
+  }
+  .explore-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+  .explore-card .card-icon {
+    width: 56px; height: 56px; border-radius: 14px; display: flex;
+    align-items: center; justify-content: center; font-size: 26px; margin-bottom: 20px;
+  }
+  .explore-card h3 { font-size: 20px; font-weight: 700; color: var(--text-headline); margin-bottom: 8px; }
+  .explore-card p { font-size: 14px; color: var(--text-muted); line-height: 1.6; flex: 1; margin-bottom: 16px; }
+  .explore-card .card-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 14px; font-weight: 600; color: var(--purple);
+  }
+  .explore-card .card-link::after { content: '→'; transition: transform 0.2s; }
+  .explore-card:hover .card-link::after { transform: translateX(4px); }
+  .explore-card .card-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 16px; }
+  .pill {
+    display: inline-flex; align-items: center; padding: 4px 12px;
+    background: var(--purple-light); color: var(--purple);
+    font-size: 11px; font-weight: 500; border-radius: 20px;
+  }
+  .pill-yellow { background: var(--yellow-light); color: #92400E; }
+
+  /* Capability cards */
+  .cap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .cap-card {
+    background: var(--bg-white); border-radius: 12px; padding: 24px;
+    box-shadow: var(--shadow-md); border-top: 4px solid var(--purple);
+  }
+  .cap-card.accent-yellow { border-top-color: var(--yellow); }
+  .cap-card.accent-green { border-top-color: var(--success); }
+  .cap-card .cap-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--purple-light); display: flex; align-items: center; justify-content: center;
+    font-size: 18px; margin-bottom: 14px;
+  }
+  .cap-card h3 { font-size: 16px; font-weight: 700; color: var(--text-headline); margin-bottom: 6px; }
+  .cap-card p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+  /* How it works */
+  .flow-section { background: var(--bg-warm); border-radius: 16px; padding: 40px; margin-top: 20px; }
+  .flow-steps { display: flex; flex-direction: column; gap: 0; max-width: 700px; margin: 0 auto; }
+  .flow-step { display: flex; align-items: flex-start; gap: 20px; position: relative; padding: 16px 0; }
+  .flow-step::before {
+    content: ''; position: absolute; left: 19px; top: 44px; bottom: -16px;
+    width: 2px; border-left: 2px dashed rgba(60,48,140,0.2);
+  }
+  .flow-step:last-child::before { display: none; }
+  .flow-dot {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; flex-shrink: 0; z-index: 1;
+    background: var(--purple-light); color: var(--purple); border: 3px solid var(--bg-white);
+    box-shadow: var(--shadow-sm);
+  }
+  .flow-dot.active { background: var(--purple); color: #fff; }
+  .flow-text h4 { font-size: 15px; font-weight: 700; color: var(--text-headline); margin-bottom: 2px; }
+  .flow-text p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+  /* Audience note */
+  .audience-note {
+    background: linear-gradient(135deg, var(--purple) 0%, var(--purple-dark) 100%);
+    border-radius: 16px; padding: 40px; text-align: center; margin-top: 40px;
+    position: relative;
+  }
+  .audience-note h3 { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+  .audience-note p { font-size: 14px; color: rgba(255,255,255,0.7); max-width: 500px; margin: 0 auto 24px; }
+  .audience-note .sparkle { color: #fff; }
+
+  /* Footer */
+  footer {
+    padding: 32px 40px; display: flex; justify-content: space-between; align-items: center;
+    border-top: 3px solid; border-image: linear-gradient(90deg, var(--purple) 0%, var(--yellow) 100%) 1;
+  }
+  .footer-left { display: flex; align-items: center; gap: 12px; }
+  .footer-logo { font-size: 18px; font-weight: 700; color: var(--purple-dark); }
+  .footer-tagline { font-size: 13px; color: var(--text-muted); font-style: italic; }
+  .footer-right { text-align: right; }
+  .footer-label { font-size: 12px; color: var(--text-muted); }
+  .footer-confidential { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+
+  @media (max-width: 800px) {
+    .explore-grid, .cap-grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 32px; }
+    .stats-bar { gap: 24px; }
+    nav { padding: 0 16px; }
+    .section { padding: 40px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">
+    <div class="nav-logo">Revel<span>Ai</span> Health</div>
+    <div class="nav-divider"></div>
+    <div class="nav-product">KIMI MSK Agent</div>
+  </div>
+  <div class="nav-links">
+    <a href="#overview">Overview</a>
+    <a href="#capabilities">Capabilities</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#explore">Explore</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <span class="sparkle sparkle-1">✦</span>
+  <span class="sparkle sparkle-2">✦</span>
+  <span class="sparkle sparkle-3">✦</span>
+  <span class="sparkle sparkle-4">✦</span>
+  <div class="hero-content">
+    <div class="label">CMS ACCESS Model MSK Track</div>
+    <h1>Meet <em>KIMI</em> — AI-Powered<br>Musculoskeletal Care Coach</h1>
+    <p>Clinical-grade AI delivering evidence-based MSK pain management and rehabilitation to Medicare beneficiaries. 24/7 virtual coaching, real-time safety monitoring, and seamless EHR integration.</p>
+    <div class="hero-ctas">
+      <a href="KIMI_Engineering_Overview.html" class="btn-primary">Engineering Deep Dive →</a>
+      <a href="KIMI_3D_Brain_Architecture.html" class="btn-secondary">Interactive 3D Architecture</a>
+    </div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat"><div class="num">8</div><div class="label-text">Body Regions</div></div>
+  <div class="stat"><div class="num">12</div><div class="label-text">Core Components</div></div>
+  <div class="stat"><div class="num">6</div><div class="label-text">Architecture Layers</div></div>
+  <div class="stat"><div class="num">60+</div><div class="label-text">Exercises</div></div>
+  <div class="stat"><div class="num">10</div><div class="label-text">Validated PROMs</div></div>
+  <div class="stat"><div class="num highlight">$180</div><div class="label-text">Annual OAP Cap</div></div>
+</div>
+
+<!-- OVERVIEW -->
+<div class="section" id="overview">
+  <div class="section-header">
+    <div class="section-label">What KIMI Does</div>
+    <h2>A Force Multiplier for Clinical Care Teams</h2>
+    <p>KIMI extends the reach of care teams by providing guideline-concordant coaching, exercise programming, and continuous patient monitoring — all within the ACCESS Model framework.</p>
+  </div>
+</div>
+
+<!-- CAPABILITIES -->
+<div class="section" id="capabilities" style="padding-top:0;">
+  <div class="cap-grid">
+    <div class="cap-card">
+      <div class="cap-icon">🧠</div>
+      <h3>Clinical Decision Support</h3>
+      <p>Real-time pain phenotyping (nociceptive, neuropathic, nociplastic), 8-region red flag scanning, and evidence-based treatment recommendations via rule-based + ML hybrid engine.</p>
+    </div>
+    <div class="cap-card accent-yellow">
+      <div class="cap-icon" style="background:var(--yellow-light);">💬</div>
+      <h3>Conversational Coaching</h3>
+      <p>LLM-powered clinical dialogue with motivational interviewing, exercise coaching, and crisis support. Temperature 0.3 for clinical safety, max 500 token responses.</p>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">📋</div>
+      <h3>Personalized Care Plans</h3>
+      <p>4-phase rehabilitation protocols — Foundation → Building → Strengthening → Maintenance — with PROMIS-based progression criteria and automated phase advancement.</p>
+    </div>
+    <div class="cap-card accent-green">
+      <div class="cap-icon" style="background:var(--success-light);">🛡️</div>
+      <h3>Safety Guardrails</h3>
+      <p>4-tier clinical escalation with continuous red flag scanning. 100% sensitivity target for serious pathology. Non-bypassable safety layer at every interaction.</p>
+    </div>
+    <div class="cap-card accent-yellow">
+      <div class="cap-icon" style="background:var(--yellow-light);">📊</div>
+      <h3>Outcome Tracking</h3>
+      <p>10 validated PROMs collected on defined schedules — weekly NPRS, biweekly disease-specific measures, monthly comprehensive assessments with MCID deterioration alerts.</p>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">🔗</div>
+      <h3>EHR Integration</h3>
+      <p>FHIR R4 bidirectional data exchange with Epic, Cerner, Athena. 8 FHIR resource types with real-time critical sync and nightly batch for routine updates.</p>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<div class="section" id="how-it-works">
+  <div class="section-header">
+    <div class="section-label">Data Pipeline</div>
+    <h2>How KIMI Processes Patient Data</h2>
+    <p>From initial input through clinical action — every interaction passes through safety, intelligence, and documentation layers.</p>
+  </div>
+  <div class="flow-section">
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-dot active">1</div>
+        <div class="flow-text"><h4>Patient Input Capture</h4><p>Web/mobile interface collects pain reports, exercise feedback, PROM responses, and free-text messages from daily check-ins.</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <div class="flow-text"><h4>Validation & Standardization</h4><p>Data validated against schema, normalized to FHIR-compatible formats. Checked for completeness before processing.</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot active">3</div>
+        <div class="flow-text"><h4>Real-Time Red Flag Scanning</h4><p>Every input immediately processed by the 8-region Red Flag Scanner. Concerning findings trigger instant escalation — this step is non-bypassable.</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <div class="flow-text"><h4>Clinical Decision Engine</h4><p>Pain phenotyping, PROM scoring, phase progression assessment, exercise selection, and care plan updates via rule-based + ML algorithms.</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">5</div>
+        <div class="flow-text"><h4>Knowledge Base Retrieval</h4><p>BERT-based semantic search against 28 clinical content files for relevant guidelines, exercises, education content, and contraindications.</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot active">6</div>
+        <div class="flow-text"><h4>Conversation Engine Response</h4><p>LLM synthesizes clinical context into empathetic, plain-language patient responses using motivational interviewing framework (OARS).</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">7</div>
+        <div class="flow-text"><h4>Documentation & EHR Sync</h4><p>All interactions logged for CMS audit trail. Clinical data exported via FHIR bridge to Epic/Cerner/Athena. Population analytics computed.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPLORE -->
+<div class="section" id="explore">
+  <div class="section-header">
+    <div class="section-label">Go Deeper</div>
+    <h2>Explore the Architecture</h2>
+    <p>Two interactive resources for understanding KIMI's design and deployment model.</p>
+  </div>
+  <div class="explore-grid">
+    <a href="KIMI_3D_Brain_Architecture.html" class="explore-card">
+      <div class="card-icon" style="background: linear-gradient(135deg, var(--purple) 0%, var(--purple-dark) 100%); color: #fff;">🧠</div>
+      <h3>Interactive 3D Architecture</h3>
+      <p>Explore KIMI's reasoning brain as an interactive 3D model. Drag, rotate, and zoom to inspect all 12 components across 6 layers. Click any node for detailed capabilities, data flows, and explainers.</p>
+      <div class="card-pills">
+        <span class="pill">3D Interactive</span>
+        <span class="pill">12 Components</span>
+        <span class="pill">Layer Isolation</span>
+        <span class="pill-yellow pill">Data Flow Visualization</span>
+      </div>
+      <div class="card-link">Launch 3D Explorer</div>
+    </a>
+    <a href="KIMI_Engineering_Overview.html" class="explore-card">
+      <div class="card-icon" style="background: var(--yellow-light); color: #92400E;">📐</div>
+      <h3>Engineering Deep Dive</h3>
+      <p>Comprehensive documentation covering architecture, clinical engine, safety protocols, deployment model, and infrastructure. Designed for the engineering team to understand the full system specification.</p>
+      <div class="card-pills">
+        <span class="pill">6-Layer Architecture</span>
+        <span class="pill">Safety Protocols</span>
+        <span class="pill">FHIR Integration</span>
+        <span class="pill-yellow pill">Deployment Guide</span>
+      </div>
+      <div class="card-link">View Documentation</div>
+    </a>
+  </div>
+
+  <div class="audience-note">
+    <span class="sparkle" style="top:20%;left:10%;font-size:16px;">✦</span>
+    <span class="sparkle" style="bottom:20%;right:12%;font-size:12px;">✦</span>
+    <h3>Built for the ACCESS Model</h3>
+    <p>KIMI operates within the CMS ACCESS Model MSK Track — a 10-year national model launching July 5, 2026, managing chronic MSK pain for Medicare beneficiaries under outcome-aligned payments.</p>
+    <a href="KIMI_Engineering_Overview.html#deployment" class="btn-primary" style="font-size:14px; padding:12px 24px;">View Deployment Details →</a>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-left">
+    <div class="footer-logo">RevelAi Health</div>
+    <span class="footer-tagline">Where Technology Meets Care</span>
+  </div>
+  <div class="footer-right">
+    <div class="footer-label">KIMI MSK Care Coach — Engineering Architecture Reference</div>
+    <div class="footer-confidential">Confidential — Internal Use Only &bull; April 2026</div>
+  </div>
+</footer>
+
+</body>
+</html>

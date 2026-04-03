@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KIMI MSK Agent — Interactive 3D Reasoning Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a1a; color: #e0e0e0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+
+  #scene { width: 100vw; height: 100vh; display: block; cursor: grab; }
+  #scene:active { cursor: grabbing; }
+
+  /* HUD */
+  #hud {
+    position: fixed; top: 0; left: 0; width: 100%; padding: 16px 24px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none; z-index: 10;
+  }
+  #hud > * { pointer-events: auto; }
+  #title-block h1 { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+  #title-block p { font-size: 11px; color: #8888aa; margin-top: 2px; }
+  .back-link {
+    display: inline-block; font-size: 11px; color: #6688cc; text-decoration: none;
+    margin-bottom: 6px; transition: color 0.2s;
+  }
+  .back-link:hover { color: #aaccff; }
+
+  #controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .ctrl-btn {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    color: #ccc; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
+    transition: all 0.2s; white-space: nowrap;
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .ctrl-btn.active { background: rgba(100,140,255,0.25); border-color: rgba(100,140,255,0.5); color: #a0c0ff; }
+
+  /* Zoom controls */
+  #zoom-controls {
+    position: fixed; right: 20px; bottom: 80px; display: flex; flex-direction: column; gap: 4px; z-index: 10;
+  }
+  .zoom-btn {
+    width: 36px; height: 36px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    color: #ccc; border-radius: 8px; font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+  }
+  .zoom-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+  /* Info panel */
+  #info-panel {
+    position: fixed; right: 0; top: 0; width: 400px; height: 100vh;
+    background: rgba(12,12,30,0.96); border-left: 1px solid rgba(255,255,255,0.08);
+    padding: 28px; overflow-y: auto; transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); z-index: 20;
+    backdrop-filter: blur(20px);
+  }
+  #info-panel.open { transform: translateX(0); }
+  #info-panel h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  #info-panel .layer-tag {
+    display: inline-block; font-size: 10px; padding: 3px 10px; border-radius: 4px;
+    margin-bottom: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  #info-panel .desc { font-size: 13px; line-height: 1.7; color: #b0b0c8; margin-bottom: 16px; }
+  #info-panel .section-title { font-size: 11px; font-weight: 700; color: #8888aa; text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 8px; }
+  #info-panel ul { list-style: none; padding: 0; }
+  #info-panel li { font-size: 12px; color: #a0a0c0; padding: 5px 0; padding-left: 16px; position: relative; line-height: 1.5; }
+  #info-panel li::before { content: '→'; position: absolute; left: 0; color: #6688cc; }
+  #info-panel .close-btn {
+    position: absolute; top: 16px; right: 16px; width: 30px; height: 30px;
+    background: rgba(255,255,255,0.06); border: none; color: #888; font-size: 18px;
+    border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  #info-panel .close-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  #info-panel .connections { margin-top: 8px; }
+  #info-panel .conn-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 0;
+    font-size: 12px; color: #8888bb;
+  }
+  #info-panel .conn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  #info-panel .explainer {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px; padding: 14px; margin-top: 16px; font-size: 12px; color: #9090b0; line-height: 1.6;
+  }
+  #info-panel .explainer strong { color: #c0c0e0; }
+
+  /* Legend */
+  #legend {
+    position: fixed; bottom: 16px; left: 16px; z-index: 10;
+    background: rgba(12,12,30,0.88); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 14px 18px; backdrop-filter: blur(10px);
+  }
+  #legend h3 { font-size: 10px; font-weight: 700; color: #8888aa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .legend-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 11px; color: #a0a0c0; cursor: pointer; transition: color 0.2s; }
+  .legend-row:hover { color: #fff; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed; padding: 8px 14px; background: rgba(20,20,45,0.96);
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+    font-size: 12px; color: #ddd; pointer-events: none; z-index: 30;
+    display: none; white-space: nowrap; backdrop-filter: blur(8px);
+    max-width: 300px;
+  }
+  #tooltip .tip-sub { font-size: 10px; color: #888; margin-top: 2px; white-space: normal; }
+
+  /* Instructions */
+  #instructions {
+    position: fixed; bottom: 16px; right: 16px; z-index: 10;
+    font-size: 10px; color: #444; text-align: right; line-height: 1.6;
+  }
+
+  /* Minimap */
+  #minimap {
+    position: fixed; bottom: 60px; left: 16px; width: 140px; height: 100px; z-index: 10;
+    background: rgba(12,12,30,0.7); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; overflow: hidden;
+  }
+  #minimap canvas { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<div id="hud">
+  <div id="title-block">
+    <a href="index.html" class="back-link">&larr; Back to Overview</a>
+    <h1>KIMI MSK Agent — 3D Reasoning Architecture</h1>
+    <p>Drag to rotate &bull; Scroll to zoom &bull; Shift+drag to pan &bull; Click any node to inspect</p>
+  </div>
+  <div id="controls">
+    <button class="ctrl-btn" onclick="focusLayer(0)">All Layers</button>
+    <button class="ctrl-btn" onclick="focusLayer(1)" style="border-left:3px solid rgba(79,195,247,0.6)">L1 Interface</button>
+    <button class="ctrl-btn" onclick="focusLayer(2)" style="border-left:3px solid rgba(171,71,188,0.6)">L2 Conversation</button>
+    <button class="ctrl-btn" onclick="focusLayer(3)" style="border-left:3px solid rgba(239,83,80,0.6)">L3 Decision</button>
+    <button class="ctrl-btn" onclick="focusLayer(4)" style="border-left:3px solid rgba(102,187,106,0.6)">L4 Knowledge</button>
+    <button class="ctrl-btn" onclick="focusLayer(5)" style="border-left:3px solid rgba(255,167,38,0.6)">L5 Integration</button>
+    <button class="ctrl-btn" onclick="focusLayer(6)" style="border-left:3px solid rgba(120,144,156,0.6)">L6 Security</button>
+    <button class="ctrl-btn" id="btn-labels" onclick="toggleLabels()">Labels</button>
+    <button class="ctrl-btn" id="btn-flow" onclick="toggleFlow()">Data Flow</button>
+    <button class="ctrl-btn" id="btn-auto" onclick="toggleAutoRotate()">Auto Rotate</button>
+    <button class="ctrl-btn" onclick="resetView()">Reset</button>
+  </div>
+</div>
+
+<div id="zoom-controls">
+  <button class="zoom-btn" onclick="zoomIn()">+</button>
+  <button class="zoom-btn" onclick="zoomOut()">&minus;</button>
+  <button class="zoom-btn" onclick="resetView()" style="font-size:12px;">⟲</button>
+</div>
+
+<div id="info-panel">
+  <button class="close-btn" onclick="closePanel()">&times;</button>
+  <div id="panel-content"></div>
+</div>
+
+<div id="legend">
+  <h3>Architecture Layers</h3>
+  <div class="legend-row" onclick="focusLayer(1)"><div class="legend-dot" style="background:#4fc3f7"></div>L1 — Patient Interface</div>
+  <div class="legend-row" onclick="focusLayer(2)"><div class="legend-dot" style="background:#ab47bc"></div>L2 — Conversation Engine</div>
+  <div class="legend-row" onclick="focusLayer(3)"><div class="legend-dot" style="background:#ef5350"></div>L3 — Clinical Decision Engine</div>
+  <div class="legend-row" onclick="focusLayer(4)"><div class="legend-dot" style="background:#66bb6a"></div>L4 — Knowledge Base</div>
+  <div class="legend-row" onclick="focusLayer(5)"><div class="legend-dot" style="background:#ffa726"></div>L5 — Integration Layer</div>
+  <div class="legend-row" onclick="focusLayer(6)"><div class="legend-dot" style="background:#78909c"></div>L6 — Data / Security</div>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="instructions">
+  Click legend layers to isolate<br>
+  Use +/- buttons or scroll to zoom
+</div>
+
+<div id="minimap"><canvas id="minimap-canvas"></canvas></div>
+
+<script>
+// ──────── DATA MODEL ────────
+const LAYER_COLORS = {
+  1: [79,195,247], 2: [171,71,188], 3: [239,83,80],
+  4: [102,187,106], 5: [255,167,38], 6: [120,144,156]
+};
+const LAYER_NAMES = {
+  1:'Patient Interface', 2:'Conversation Engine', 3:'Clinical Decision Engine',
+  4:'Knowledge Base', 5:'Integration Layer', 6:'Security & Compliance'
+};
+
+const nodes = [
+  // Layer 1: Patient Interface — spread wider
+  { id:'ui_dashboard', label:'Daily Check-in\nDashboard', layer:1, x:0, y:3.5, z:0, r:0.42,
+    desc:'Patient-facing responsive web and mobile interface for daily health check-ins, pain tracking via body diagrams, and personalized progress visualization.',
+    details:['Interactive body diagram pain tracker','Real-time progress metrics & graphs','WCAG 2.1 AA accessible design','Content at 6th-8th grade reading level','Voice input for accessibility needs','Session auto-save + offline capability','Responsive across desktop/tablet/mobile'],
+    explainer:'The Dashboard is the patient\'s primary touchpoint with KIMI. Every morning, patients report their pain levels, sleep quality, and exercise completion. The dashboard adapts its display based on the patient\'s current rehabilitation phase — showing Foundation phase patients their mobility progress, while Maintenance phase patients see long-term trend analysis.',
+    connections:['conv_engine','prom_collector'] },
+  { id:'ui_exercise', label:'Exercise\nVideo Library', layer:1, x:-2.5, y:3.5, z:1.2, r:0.38,
+    desc:'Video-based exercise demonstration library with 60+ exercises across all 8 body regions, organized by difficulty and rehabilitation phase.',
+    details:['60+ exercises with HD video demos','Beginner/intermediate/advanced versions','Real-time form coaching overlays','Contraindication warnings per patient','Pain response guidance (0-4 safe zone)','Exercise history and completion tracking'],
+    explainer:'Each exercise video includes adaptive coaching — if a patient reported elevated pain (5+/10) in their last check-in, KIMI automatically highlights gentler alternatives and shows modified positions. The library cross-references the patient\'s comorbidities to flag contraindicated movements before they start.',
+    connections:['exercise_prescriber','conv_engine'] },
+  { id:'ui_education', label:'Education\nContent Browser', layer:1, x:2.5, y:3.5, z:1.2, r:0.38,
+    desc:'Scaffolded patient education delivering 7 CBT modules and pain neuroscience education, sequenced by rehabilitation phase.',
+    details:['7 CBT pain management modules','3-5 minute video lessons each','Interactive comprehension quizzes','Downloadable worksheets & resources','Visual infographics and diagrams','Voice-over narration for accessibility'],
+    explainer:'Education is phase-locked: patients in Foundation phase see pain science and threat reduction content, while Building phase unlocks activity pacing and sleep modules. This prevents cognitive overload and ensures patients learn concepts in the right order. Comprehension quizzes use teach-back methodology to verify understanding.',
+    connections:['edu_sequencer','conv_engine'] },
+  { id:'ui_messaging', label:'Messaging &\nScheduling Hub', layer:1, x:0, y:3.5, z:2.4, r:0.34,
+    desc:'Secure HIPAA-compliant messaging for care coordinator communication, telehealth appointment scheduling, and notification management.',
+    details:['Encrypted care team messaging','Telehealth video session launcher','Appointment scheduling with reminders','Push notification management','Pre-visit material delivery','Post-visit summary access'],
+    explainer:'The Messaging Hub bridges asynchronous care coordination with synchronous telehealth. When the Escalation Gateway flags a patient concern, the hub automatically surfaces a "Connect with your care team" prompt — without revealing the clinical severity to avoid unnecessary alarm.',
+    connections:['session_router','escalation_gateway'] },
+
+  // Layer 2: Conversation Engine — centered and prominent
+  { id:'conv_engine', label:'LLM Clinical\nConversation Engine', layer:2, x:0, y:1.8, z:0, r:0.65,
+    desc:'Fine-tuned large language model providing real-time clinical dialogue. Combines motivational interviewing, symptom assessment, exercise coaching, and crisis support. Temperature 0.3 for clinical safety with 8K context window.',
+    details:['Context-aware dialogue maintaining full patient history','Motivational interviewing (OARS framework)','Real-time symptom assessment with red flag detection','Exercise coaching with adaptive difficulty','Crisis support and escalation triggering','Max 500 token responses (clinical brevity)','Temperature 0.3 for reduced variance','8,000 token context window'],
+    explainer:'The Conversation Engine is KIMI\'s "voice" — the component patients interact with directly. It maintains a rich context of the patient\'s entire care history, current phase, recent PROM scores, and active care plan. Every response passes through the Red Flag Scanner before delivery. The low temperature (0.3) ensures clinically conservative responses — KIMI will never improvise medical advice. Motivational interviewing techniques (Open questions, Affirmations, Reflections, Summaries) are structurally embedded in the prompt chain.',
+    connections:['red_flag_scanner','pain_phenotyper','care_plan_builder','phase_manager','prom_collector','knowledge_base'] },
+
+  // Layer 3: Clinical Decision Engine — spread across the middle band
+  { id:'intake_engine', label:'11-Step\nIntake Engine', layer:3, x:-3.2, y:0, z:-0.8, r:0.42,
+    desc:'The critical first encounter: 11-step enrollment intake protocol completing eligibility verification, baseline data collection, red flag screening, and initial care plan — all within a 25-35 minute conversational session.',
+    details:['Medicare eligibility verification','Anatomical site classification (8 regions)','Pain phenotype characterization','Comorbidity and medication screening','Red flag screening (non-bypassable)','ACCESS-mandated PROM baseline collection','Psychosocial risk stratification (STarT Back)','PHQ-2 and GAD-2 screening','Consent and authorization','Initial care plan construction','60-day CMS submission deadline compliance'],
+    explainer:'The Intake Engine represents the single most important interaction in the 12-month care period. It must accomplish 6 mandatory functions in one session without physical examination — relying entirely on patient self-report and validated screening instruments. The 60-day CMS submission deadline means baseline PROMs collected here establish the improvement denominator for the entire ACCESS Model payment structure.',
+    connections:['pain_phenotyper','red_flag_scanner','prom_collector','care_plan_builder'] },
+  { id:'pain_phenotyper', label:'Pain Phenotype\nClassifier', layer:3, x:-1.6, y:0, z:1.0, r:0.45,
+    desc:'Classifies pain into nociceptive (mechanical), neuropathic (nerve-related), or nociplastic (central sensitization) phenotypes using validated screening tools (LANSS, DN4, S-LANSS).',
+    details:['Three-phenotype classification system','LANSS/DN4/S-LANSS screening integration','Pain descriptor analysis (sharp, burning, etc.)','Chronicity and onset pattern assessment','Primary + secondary phenotype assignment','Treatment approach bias determination','Updated at each clinical reassessment'],
+    explainer:'Pain phenotyping is the clinical foundation that determines everything downstream. A patient with nociceptive knee OA gets exercise-heavy treatment. A patient with nociplastic features (central sensitization, widespread pain, sleep disruption) gets CBT-heavy treatment with graded activity. Getting this wrong means 12 months of suboptimal care. The phenotyper runs at intake AND at every reassessment, because phenotypes can shift as treatment progresses.',
+    connections:['care_plan_builder','exercise_prescriber','edu_sequencer','knowledge_base'] },
+  { id:'red_flag_scanner', label:'8-Region\nRed Flag Scanner', layer:3, x:1.6, y:0, z:1.0, r:0.50,
+    desc:'Non-bypassable safety layer providing continuous red flag detection across 8 anatomical regions with a 100% sensitivity mandate. Processes every patient interaction in real-time.',
+    details:['8 anatomical region-specific models','Cauda equina syndrome detection','Septic joint screening protocols','Cancer metastasis flag patterns','Infection indicator detection','Natural language red flag pattern matching','Behavioral change detection algorithms','Zero false-negative mandate','False positives explicitly acceptable'],
+    explainer:'The Red Flag Scanner is KIMI\'s most critical safety component. It runs on EVERY patient interaction — not just clinical check-ins, but also free-text messages, exercise feedback, and even scheduling requests. The 100% sensitivity target means it is deliberately tuned to over-identify: a false positive (unnecessary escalation) is always preferable to a false negative (missed serious pathology). The scanner uses both structured rule-based checks AND natural language pattern matching to catch subtle warning signs like "my legs feel weird when I walk" (possible myelopathy).',
+    connections:['escalation_gateway','conv_engine','knowledge_base'] },
+  { id:'prom_collector', label:'PROM Outcome\nCollector & Scorer', layer:3, x:0, y:0, z:-2.2, r:0.42,
+    desc:'Systematic collection and scoring of 10 validated outcome measures on clinically-defined schedules. Calculates change scores, effect sizes, and triggers alerts on significant deterioration.',
+    details:['10 validated instruments tracked','NPRS (weekly + daily pain)','ODI/NDI (biweekly disability)','KOS-ADLS (biweekly knee function)','LEFS, PSFS, PROMIS-29 (monthly)','CSI, PCS, HADS (baseline + 12/52 wk)','MCID-based deterioration alerts (>10% decline)','Visual progress feedback to patients','Population-level analytics generation'],
+    explainer:'PROMs are the language of the ACCESS Model — CMS pays based on measurable improvement in these scores. The collector enforces a critical rule: the SAME instrument must be used throughout the 12-month period (you can\'t switch from ODI to NDI mid-course). Weekly PROMIS scores drive phase progression decisions, while the 12/24/52-week comprehensive assessments generate the data CMS uses for payment determination.',
+    connections:['phase_manager','care_plan_builder','fhir_bridge'] },
+  { id:'care_plan_builder', label:'Personalized\nCare Plan Builder', layer:3, x:3.2, y:0, z:-0.8, r:0.48,
+    desc:'Generates individualized 4-phase care plans synthesizing pain phenotype, risk stratification, patient goals, and evidence-based protocols into actionable treatment roadmaps.',
+    details:['4-phase protocol assignment','Pain phenotype-driven exercise selection','Phase-appropriate education sequencing','PROM monitoring schedule configuration','Telehealth visit scheduling','Escalation trigger customization','Expected outcomes and milestone dates','Plain-language patient summary generation','EHR-compatible documentation output'],
+    explainer:'The Care Plan Builder is where all upstream intelligence converges. It takes the Pain Phenotyper\'s classification, the Red Flag Scanner\'s clearance, the PROM Collector\'s baseline scores, and the patient\'s stated goals — and synthesizes a personalized roadmap. Each plan includes not just exercises and education, but also specific escalation triggers (e.g., "if this patient\'s ODI worsens by >10 points, escalate to PT for reassessment"). Plans are generated in both clinical documentation format AND plain-language patient summaries.',
+    connections:['phase_manager','exercise_prescriber','edu_sequencer','fhir_bridge'] },
+  { id:'phase_manager', label:'4-Phase\nProgression Manager', layer:3, x:0, y:-0.4, z:2.0, r:0.40,
+    desc:'Manages patient progression through Foundation → Building → Strengthening → Maintenance phases using PROMIS-based advancement criteria with automated advancement and regression.',
+    details:['PROMIS PF/PI score-based thresholds','Automated advancement assessment','Regression on MCID decline','Plateau detection (3 consecutive stalls → escalate)','Phase-specific session scheduling','Exercise difficulty progression','Education module unlocking'],
+    explainer:'Phase management is the treatment clock. Foundation phase (Weeks 1-4) focuses on pain reduction and gentle mobility. Building (5-8) adds strength. Strengthening (9-16) targets functional recovery. Maintenance (17-52) is self-management. But progression isn\'t time-based — it\'s score-based. A patient who hasn\'t improved by MCID after 3 consecutive weekly assessments triggers automatic clinician escalation. Regression is equally data-driven: if PROMIS scores decline by ≥MCID, the patient drops back a phase and gets clinical review.',
+    connections:['exercise_prescriber','edu_sequencer','session_router','conv_engine'] },
+  { id:'exercise_prescriber', label:'Adaptive Exercise\nPrescriber', layer:3, x:-3.2, y:-0.4, z:1.6, r:0.40,
+    desc:'Personalized exercise prescription selecting from 60+ exercises with progressive overload, pain monitoring (0-4 safe zone), contraindication checking, and 24-hour follow-up overdose detection.',
+    details:['60+ exercises across 8 body regions','Movement deficit targeting algorithm','Patient comorbidity cross-check','Contraindication database integration','Sets/reps/frequency/duration assignment','Pain 0-4 safe zone enforcement','24-hour post-exercise pain monitoring','Automatic regression on pain escalation','Progressive overload scheduling'],
+    explainer:'The Exercise Prescriber doesn\'t just assign exercises — it adapts in real-time. If a patient reports pain >4/10 during an exercise, KIMI immediately offers a regression. If post-exercise pain doesn\'t return to baseline within 2 hours, the system flags "overdosing" and reduces intensity at the next session. The algorithm considers not just the MSK condition but also comorbidities (e.g., a patient with NYHA Class II heart failure gets modified aerobic components).',
+    connections:['knowledge_base','phase_manager'] },
+  { id:'edu_sequencer', label:'CBT Education\nSequencer', layer:3, x:3.2, y:-0.4, z:1.6, r:0.40,
+    desc:'Delivers 7-module CBT framework and pain neuroscience education in phase-locked, scaffolded sequence. Content adapts based on pain phenotype and psychosocial risk profile.',
+    details:['Module 1: Pain Science Education (Wk 1-2)','Module 2: Threat Reduction (Wk 2-3)','Module 3: Activity Pacing (Wk 3-5)','Module 4: Sleep & Recovery (Wk 4-6)','Module 5: Stress & Emotions (Wk 6-8)','Module 6: Return to Activity (Wk 9-16)','Module 7: Long-term Self-Mgmt (Wk 17-52)','Teach-back comprehension verification'],
+    explainer:'The Education Sequencer addresses the biopsychosocial model — physical rehabilitation alone isn\'t sufficient for chronic pain. Patients with nociplastic phenotypes get early, intensive CBT content. Those with high catastrophizing scores (PCS) receive additional threat reduction modules. The sequencer uses teach-back methodology: after each lesson, it asks the patient to explain the concept back, verifying comprehension before unlocking the next module.',
+    connections:['knowledge_base','conv_engine'] },
+  { id:'session_router', label:'10-Type\nSession Router', layer:3, x:0, y:-0.4, z:-2.6, r:0.38,
+    desc:'Manages 10 distinct telehealth session types with intelligent scheduling, pre-visit material preparation, and post-visit documentation.',
+    details:['Initial Assessment (45 min, Week 1)','Phase Kickoff (45 min, at phase transitions)','Exercise Form Check (20 min, monthly)','Flare-Up Management (20 min, as needed)','Progress Review (30 min, at 12/24/52 wk)','Medication Review (20 min, as needed)','Comorbidity Management (30 min, as needed)','Motivational Interview (20 min, monthly)','Escalation/Discharge Planning (30 min)','Maintenance Check-in (20 min, monthly)'],
+    explainer:'The Session Router is KIMI\'s scheduling brain. It dynamically prioritizes session types based on clinical signals — if PROM scores are declining, it schedules an urgent Progress Review. If the patient has missed 3+ exercises, it triggers a Motivational Interview. If a new medication was reported, it queues a Medication Review. Each session type has a defined pre-visit material package that KIMI delivers 24 hours before the appointment.',
+    connections:['escalation_gateway','conv_engine','fhir_bridge'] },
+  { id:'escalation_gateway', label:'4-Tier\nEscalation Gateway', layer:3, x:3.8, y:0, z:1.0, r:0.48,
+    desc:'Critical safety gateway managing 4-tier clinical escalation from automated phrase detection through emergency 911 routing. Includes dedicated mental health crisis protocol.',
+    details:['Tier 1: Automated phrase detection (real-time)','Tier 2: Physician/APP review (4-12 hr)','Tier 3: Urgent intervention (same day)','Tier 4: Emergency / 911 (immediate)','Mental health crisis protocol','Suicidal ideation detection','Escalation tracking dashboard','Time-to-resolution metrics','Specificity/sensitivity quality tracking'],
+    explainer:'The Escalation Gateway is KIMI\'s safety net. At Tier 1, the system detects concerning language without alarming the patient — it might say "Let me check in with your care team about what you\'re experiencing" while simultaneously generating a clinical alert. Tier 4 is for true emergencies: suspected cauda equina syndrome, signs of stroke, or active suicidal ideation. In these cases, KIMI provides crisis resources (988 Lifeline), contacts emergency services, and reaches out to the patient\'s emergency contact — all within seconds.',
+    connections:['fhir_bridge','session_router'] },
+
+  // Layer 4: Knowledge Base
+  { id:'knowledge_base', label:'Vectorized Clinical\nKnowledge Base', layer:4, x:0, y:-2.2, z:0, r:0.60,
+    desc:'Approximately 34,500 lines across 28 specialized clinical content files. BERT-based vector embeddings for semantic retrieval. Evidence-level tagged (RCT, observational, expert consensus) with PubMed citation linkage and quarterly review cycle.',
+    details:['28 specialized clinical content files','~34,500 lines of clinical content','Exercise libraries for 8 body regions','Clinical practice guidelines & protocols','7 CBT pain psychology modules','100+ patient education topics','Red flag and contraindication databases','Drug interaction & comorbidity reference','PROM scoring algorithms & MCID values','Care plan templates & phase protocols','BERT-based semantic vector embeddings','Evidence-level tagging system','PubMed citation linkage','Quarterly evidence review cycle'],
+    explainer:'The Knowledge Base is KIMI\'s clinical memory. Unlike the Conversation Engine which generates responses, the KB stores verified, evidence-graded clinical content. When the Conversation Engine needs to explain why exercise helps knee OA, it retrieves from the KB — it doesn\'t generate an answer from training data. This separation is critical for clinical safety: all medical content is human-reviewed and evidence-tagged. The quarterly review cycle ensures guidelines stay current with evolving clinical evidence.',
+    connections:['conv_engine','pain_phenotyper','red_flag_scanner','exercise_prescriber','edu_sequencer'] },
+
+  // Layer 5: Integration
+  { id:'fhir_bridge', label:'FHIR R4\nBridge', layer:5, x:-2.0, y:-3.4, z:0, r:0.44,
+    desc:'FHIR R4-compliant bidirectional data exchange with major EHR systems. Implements 8 FHIR resource types with real-time critical data sync and nightly batch for routine updates.',
+    details:['8 FHIR resource types implemented','Patient, Condition, CarePlan','QuestionnaireResponse, Observation','ProcedureRequest, DocumentReference','Communication resources','Real-time sync for critical data','Nightly batch for routine updates','Bidirectional: inbound + outbound'],
+    explainer:'The FHIR Bridge makes KIMI a first-class citizen in the healthcare data ecosystem. When a patient\'s primary care physician opens their Epic chart, they see KIMI\'s care plan, PROM trends, exercise adherence, and any escalation notes — all formatted as native FHIR resources. Conversely, when a new medication is prescribed in the EHR, KIMI receives it and cross-checks for exercise contraindications.',
+    connections:['security_layer'] },
+  { id:'ehr_integrations', label:'EHR, Pharmacy\n& Claims APIs', layer:5, x:2.0, y:-3.4, z:0, r:0.42,
+    desc:'Production connectors to Epic, Cerner, Athena, pharmacy systems, imaging repositories, lab result feeds, eligibility verification, and claims/billing interfaces.',
+    details:['Epic/Cerner/Athena EHR connectors','Pharmacy drug interaction checking','Imaging and lab result ingestion','Real-time Medicare eligibility verification','Claims and billing interface','CRM for care coordinator communication','90-day claims lookback at intake'],
+    explainer:'These integrations enable KIMI\'s closed-loop clinical workflow. At intake, KIMI pulls 90 days of Medicare claims history to understand the patient\'s recent care. During treatment, pharmacy feeds allow real-time drug interaction checking when exercise recommendations involve NSAIDs or muscle relaxants. The claims interface manages the $180/year OAP budget, ensuring KIMI optimizes care delivery within the payment cap.',
+    connections:['fhir_bridge','security_layer'] },
+
+  // Layer 6: Security
+  { id:'security_layer', label:'Data, Security &\nCompliance Foundation', layer:6, x:0, y:-4.4, z:0, r:0.55,
+    desc:'Foundation layer providing HIPAA compliance, encryption, access control, audit logging, disaster recovery, and continuous cybersecurity monitoring. Supports CMS ACCESS Model regulatory requirements.',
+    details:['AES-256 encryption at rest','TLS 1.3 encryption in transit','Role-based access control (RBAC)','Complete audit logging and trail','Automated de-identification & anonymization','Backup: RPO < 1 hour, RTO < 4 hours','CMS ACCESS Model compliance monitoring','Intrusion detection system (IDS)','Data retention and deletion workflows','Cybersecurity monitoring 24/7'],
+    explainer:'Every other layer sits on top of this foundation. HIPAA compliance isn\'t a checkbox — it\'s architectural. Every API call is encrypted, every data access is logged, every patient record can be de-identified for analytics. The RPO/RTO targets (<1hr/<4hr) mean that even in a disaster scenario, patient safety is maintained: the Escalation Gateway and Red Flag Scanner are designed to fail-safe (escalate rather than miss).',
+    connections:[] },
+];
+
+// Pre-compute edges
+const edges = [];
+nodes.forEach(n => {
+  (n.connections || []).forEach(targetId => {
+    edges.push({ from: n.id, to: targetId });
+  });
+});
+
+// ──────── 3D RENDERER ────────
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Camera — zoomed out more for full visibility
+let camRX = -0.25, camRY = 0.3, camDist = 12;
+let targetCamDist = 12, targetCamRX = -0.25, targetCamRY = 0.3;
+let panX = 0, panY = 0.3, targetPanX = 0, targetPanY = 0.3;
+let autoRotate = true;
+let showLabels = true;
+let showFlow = true;
+let focusedLayer = 0; // 0 = all
+
+// Smooth camera
+function lerpCamera() {
+  camDist += (targetCamDist - camDist) * 0.08;
+  camRX += (targetCamRX - camRX) * 0.08;
+  camRY += (targetCamRY - camRY) * 0.08;
+  panX += (targetPanX - panX) * 0.08;
+  panY += (targetPanY - panY) * 0.08;
+}
+
+// Interaction state
+let dragging = false, panning = false, lastMX = 0, lastMY = 0;
+let hoveredNode = null;
+
+function project(x, y, z) {
+  let cosY = Math.cos(camRY), sinY = Math.sin(camRY);
+  let cosX = Math.cos(camRX), sinX = Math.sin(camRX);
+  let x1 = x * cosY - z * sinY;
+  let z1 = x * sinY + z * cosY;
+  let y1 = y * cosX - z1 * sinX;
+  let z2 = y * sinX + z1 * cosX;
+  let perspective = camDist / (camDist + z2);
+  let sx = W / 2 + (x1 + panX) * perspective * 80;
+  let sy = H / 2 - (y1 + panY) * perspective * 80;
+  return { x: sx, y: sy, scale: perspective, depth: z2 };
+}
+
+// Flow particles
+let particles = [];
+function initParticles() {
+  particles = [];
+  edges.forEach(e => {
+    for (let i = 0; i < 3; i++) {
+      particles.push({ edge: e, t: Math.random(), speed: 0.002 + Math.random() * 0.003 });
+    }
+  });
+}
+initParticles();
+
+let time = 0;
+function render() {
+  time += 0.016;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  const bg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H) * 0.7);
+  bg.addColorStop(0, '#10102a');
+  bg.addColorStop(1, '#060610');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  lerpCamera();
+  if (autoRotate) targetCamRY += 0.0015;
+
+  // Project all nodes
+  const projected = nodes.map(n => {
+    const p = project(n.x, n.y, n.z);
+    const dimmed = focusedLayer > 0 && n.layer !== focusedLayer;
+    return { ...n, sx: p.x, sy: p.y, scale: p.scale, depth: p.depth, sr: n.r * p.scale * 80, dimmed };
+  });
+
+  projected.sort((a, b) => b.depth - a.depth);
+
+  const lookup = {};
+  projected.forEach(n => lookup[n.id] = n);
+
+  // Draw edges
+  edges.forEach(e => {
+    const a = lookup[e.from], b = lookup[e.to];
+    if (!a || !b) return;
+    const bothDimmed = a.dimmed && b.dimmed;
+    const alpha = bothDimmed ? 0.03 : (a.dimmed || b.dimmed ? 0.06 : 0.15 + 0.08 * Math.min(a.scale, b.scale));
+
+    ctx.beginPath();
+    // Curved edges
+    const mx = (a.sx + b.sx) / 2 + (a.sy - b.sy) * 0.1;
+    const my = (a.sy + b.sy) / 2 + (b.sx - a.sx) * 0.1;
+    ctx.moveTo(a.sx, a.sy);
+    ctx.quadraticCurveTo(mx, my, b.sx, b.sy);
+    ctx.strokeStyle = `rgba(100,130,220,${alpha})`;
+    ctx.lineWidth = bothDimmed ? 0.5 : 1.2;
+    ctx.stroke();
+  });
+
+  // Draw flow particles
+  if (showFlow) {
+    particles.forEach(p => {
+      p.t += p.speed;
+      if (p.t > 1) p.t -= 1;
+      const a = lookup[p.edge.from], b = lookup[p.edge.to];
+      if (!a || !b) return;
+      if (a.dimmed && b.dimmed) return;
+      const t = p.t;
+      const mx = (a.sx + b.sx) / 2 + (a.sy - b.sy) * 0.1;
+      const my = (a.sy + b.sy) / 2 + (b.sx - a.sx) * 0.1;
+      const px = (1-t)*(1-t)*a.sx + 2*(1-t)*t*mx + t*t*b.sx;
+      const py = (1-t)*(1-t)*a.sy + 2*(1-t)*t*my + t*t*b.sy;
+      const sc = (a.scale + b.scale) / 2;
+      const c = LAYER_COLORS[a.layer];
+      ctx.beginPath();
+      ctx.arc(px, py, 2.5 * sc, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.75)`;
+      ctx.fill();
+    });
+  }
+
+  // Draw nodes
+  projected.forEach(n => {
+    const c = LAYER_COLORS[n.layer];
+    const isHovered = hoveredNode === n.id;
+    const dimAlpha = n.dimmed ? 0.15 : 1;
+    const glowR = n.sr + (isHovered ? 16 : 8);
+
+    // Glow
+    const glow = ctx.createRadialGradient(n.sx, n.sy, n.sr * 0.2, n.sx, n.sy, glowR);
+    glow.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${(isHovered ? 0.45 : 0.22) * dimAlpha})`);
+    glow.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+    ctx.beginPath();
+    ctx.arc(n.sx, n.sy, glowR, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+
+    // Sphere
+    const grad = ctx.createRadialGradient(n.sx - n.sr * 0.25, n.sy - n.sr * 0.25, n.sr * 0.1, n.sx, n.sy, n.sr);
+    const brighten = isHovered ? 100 : 60;
+    grad.addColorStop(0, `rgba(${Math.min(255,c[0]+brighten)},${Math.min(255,c[1]+brighten)},${Math.min(255,c[2]+brighten)},${0.95 * dimAlpha})`);
+    grad.addColorStop(0.5, `rgba(${c[0]},${c[1]},${c[2]},${0.85 * dimAlpha})`);
+    grad.addColorStop(1, `rgba(${Math.max(0,c[0]-50)},${Math.max(0,c[1]-50)},${Math.max(0,c[2]-50)},${0.65 * dimAlpha})`);
+    ctx.beginPath();
+    ctx.arc(n.sx, n.sy, n.sr, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    if (isHovered) {
+      ctx.strokeStyle = `rgba(255,255,255,0.7)`;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+
+    // Label
+    if (showLabels && n.sr > 12 && dimAlpha > 0.5) {
+      const lines = n.label.split('\n');
+      const fontSize = Math.max(9, Math.min(14, n.sr * 0.38));
+      ctx.font = `600 ${fontSize}px Inter, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Text shadow for readability
+      lines.forEach((line, i) => {
+        const yOff = (i - (lines.length - 1) / 2) * (fontSize + 3);
+        ctx.fillStyle = `rgba(0,0,0,0.5)`;
+        ctx.fillText(line, n.sx + 1, n.sy + yOff + 1);
+        ctx.fillStyle = `rgba(255,255,255,${0.75 + n.scale * 0.25})`;
+        ctx.fillText(line, n.sx, n.sy + yOff);
+      });
+    }
+  });
+
+  // Minimap
+  renderMinimap(projected);
+
+  requestAnimationFrame(render);
+}
+
+// Minimap
+const minimapCanvas = document.getElementById('minimap-canvas');
+const mctx = minimapCanvas.getContext('2d');
+function renderMinimap(projected) {
+  minimapCanvas.width = 140; minimapCanvas.height = 100;
+  mctx.clearRect(0, 0, 140, 100);
+  mctx.fillStyle = 'rgba(12,12,30,0.6)';
+  mctx.fillRect(0, 0, 140, 100);
+
+  projected.forEach(n => {
+    const c = LAYER_COLORS[n.layer];
+    const mx = 10 + (n.sx / W) * 120;
+    const my = 5 + (n.sy / H) * 90;
+    mctx.beginPath();
+    mctx.arc(mx, my, Math.max(2, n.sr * 0.06), 0, Math.PI * 2);
+    mctx.fillStyle = n.dimmed ? `rgba(${c[0]},${c[1]},${c[2]},0.2)` : `rgba(${c[0]},${c[1]},${c[2]},0.8)`;
+    mctx.fill();
+  });
+}
+
+render();
+
+// ──────── INTERACTION ────────
+canvas.addEventListener('mousedown', e => {
+  if (e.shiftKey) { panning = true; } else { dragging = true; }
+  lastMX = e.clientX; lastMY = e.clientY;
+});
+canvas.addEventListener('mousemove', e => {
+  const dx = e.clientX - lastMX, dy = e.clientY - lastMY;
+  if (dragging) {
+    targetCamRY += dx * 0.005;
+    targetCamRX += dy * 0.005;
+    targetCamRX = Math.max(-1.4, Math.min(1.4, targetCamRX));
+    autoRotate = false;
+    document.getElementById('btn-auto').classList.remove('active');
+  } else if (panning) {
+    targetPanX += dx * 0.012;
+    targetPanY -= dy * 0.012;
+  }
+  lastMX = e.clientX; lastMY = e.clientY;
+
+  // Hit test
+  hoveredNode = null;
+  nodes.forEach(n => {
+    const p = project(n.x, n.y, n.z);
+    const sr = n.r * p.scale * 80;
+    const dist = Math.sqrt((e.clientX - p.x) ** 2 + (e.clientY - p.y) ** 2);
+    if (dist < sr + 6) hoveredNode = n.id;
+  });
+
+  const tooltip = document.getElementById('tooltip');
+  if (hoveredNode && !dragging) {
+    const nd = nodes.find(n => n.id === hoveredNode);
+    tooltip.innerHTML = `<strong>${nd.label.replace('\n', ' ')}</strong><div class="tip-sub">Layer ${nd.layer}: ${LAYER_NAMES[nd.layer]} — Click to inspect</div>`;
+    tooltip.style.display = 'block';
+    tooltip.style.left = Math.min(e.clientX + 16, W - 310) + 'px';
+    tooltip.style.top = (e.clientY - 10) + 'px';
+    canvas.style.cursor = 'pointer';
+  } else {
+    tooltip.style.display = 'none';
+    canvas.style.cursor = dragging ? 'grabbing' : 'grab';
+  }
+});
+canvas.addEventListener('mouseup', () => { dragging = false; panning = false; });
+canvas.addEventListener('mouseleave', () => { dragging = false; panning = false; });
+canvas.addEventListener('wheel', e => {
+  targetCamDist += e.deltaY * 0.006;
+  targetCamDist = Math.max(4, Math.min(22, targetCamDist));
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('click', e => { if (hoveredNode) openPanel(hoveredNode); });
+
+// Zoom controls
+function zoomIn() { targetCamDist = Math.max(4, targetCamDist - 1.5); }
+function zoomOut() { targetCamDist = Math.min(22, targetCamDist + 1.5); }
+
+function focusLayer(layer) {
+  focusedLayer = layer;
+  if (layer === 0) {
+    targetCamDist = 12; targetCamRX = -0.25; targetCamRY = camRY; targetPanX = 0; targetPanY = 0.3;
+  } else {
+    // Find center of layer
+    const layerNodes = nodes.filter(n => n.layer === layer);
+    const avgY = layerNodes.reduce((s, n) => s + n.y, 0) / layerNodes.length;
+    targetPanY = -avgY * 0.15 + 0.3;
+    targetCamDist = 10;
+  }
+}
+
+// ──────── PANEL ────────
+function openPanel(id) {
+  const n = nodes.find(nd => nd.id === id);
+  if (!n) return;
+  const c = LAYER_COLORS[n.layer];
+
+  let html = `
+    <h2 style="color:rgb(${c[0]},${c[1]},${c[2]})">${n.label.replace('\n', ' ')}</h2>
+    <span class="layer-tag" style="background:rgba(${c[0]},${c[1]},${c[2]},0.2); color:rgb(${c[0]},${c[1]},${c[2]})">Layer ${n.layer}: ${LAYER_NAMES[n.layer]}</span>
+    <p class="desc">${n.desc}</p>
+  `;
+
+  if (n.explainer) {
+    html += `<div class="explainer"><strong>How it works:</strong> ${n.explainer}</div>`;
+  }
+
+  html += `<div class="section-title">Capabilities &amp; Details</div>
+    <ul>${n.details.map(d => `<li>${d}</li>`).join('')}</ul>`;
+
+  if (n.connections && n.connections.length > 0) {
+    html += `<div class="section-title">Sends Data To</div><div class="connections">`;
+    n.connections.forEach(cid => {
+      const target = nodes.find(nd => nd.id === cid);
+      if (!target) return;
+      const tc = LAYER_COLORS[target.layer];
+      html += `<div class="conn-item" style="cursor:pointer" onclick="openPanel('${cid}')"><div class="conn-dot" style="background:rgb(${tc[0]},${tc[1]},${tc[2]})"></div>${target.label.replace('\n', ' ')}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  const incoming = edges.filter(e => e.to === id).map(e => nodes.find(nd => nd.id === e.from)).filter(Boolean);
+  if (incoming.length > 0) {
+    html += `<div class="section-title">Receives Data From</div><div class="connections">`;
+    incoming.forEach(src => {
+      const tc = LAYER_COLORS[src.layer];
+      html += `<div class="conn-item" style="cursor:pointer" onclick="openPanel('${src.id}')"><div class="conn-dot" style="background:rgb(${tc[0]},${tc[1]},${tc[2]})"></div>${src.label.replace('\n', ' ')}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  document.getElementById('panel-content').innerHTML = html;
+  document.getElementById('info-panel').classList.add('open');
+}
+
+function closePanel() { document.getElementById('info-panel').classList.remove('open'); }
+
+function resetView() {
+  targetCamRX = -0.25; targetCamRY = 0.3; targetCamDist = 12;
+  targetPanX = 0; targetPanY = 0.3; focusedLayer = 0;
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  document.getElementById('btn-labels').classList.toggle('active', showLabels);
+}
+function toggleFlow() {
+  showFlow = !showFlow;
+  document.getElementById('btn-flow').classList.toggle('active', showFlow);
+}
+function toggleAutoRotate() {
+  autoRotate = !autoRotate;
+  document.getElementById('btn-auto').classList.toggle('active', autoRotate);
+}
+
+document.getElementById('btn-labels').classList.add('active');
+document.getElementById('btn-flow').classList.add('active');
+document.getElementById('btn-auto').classList.add('active');
+
+// Touch support
+let lastTouchDist = 0;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    dragging = true;
+    lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && dragging) {
+    const dx = e.touches[0].clientX - lastMX, dy = e.touches[0].clientY - lastMY;
+    targetCamRY += dx * 0.005;
+    targetCamRX += dy * 0.005;
+    targetCamRX = Math.max(-1.4, Math.min(1.4, targetCamRX));
+    lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
+    autoRotate = false;
+    document.getElementById('btn-auto').classList.remove('active');
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    targetCamDist += (lastTouchDist - dist) * 0.02;
+    targetCamDist = Math.max(4, Math.min(22, targetCamDist));
+    lastTouchDist = dist;
+  }
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener('touchend', () => { dragging = false; });
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+  if (e.key === '+' || e.key === '=') zoomIn();
+  if (e.key === '-') zoomOut();
+  if (e.key >= '0' && e.key <= '6') focusLayer(parseInt(e.key));
+  if (e.key === 'r') resetView();
+});
+</script>
+</body>
+</html>
