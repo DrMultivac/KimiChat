@@ -7,6 +7,7 @@ import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { PromCard } from "@/components/chat/message-types/PromCard";
 import { ExerciseCard } from "@/components/chat/message-types/ExerciseCard";
 import { SafetyAlert } from "@/components/chat/message-types/SafetyAlert";
+import { VoiceChatView } from "@/components/voice/VoiceChatView";
 
 export interface Message {
   id: string;
@@ -29,7 +30,10 @@ const WELCOME_MESSAGE: Message = {
   timestamp: new Date().toISOString(),
 };
 
+type ChatMode = "text" | "voice";
+
 export default function ChatPage() {
+  const [mode, setMode] = useState<ChatMode>("text");
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionType] = useState<string>("intake");
@@ -127,6 +131,12 @@ export default function ChatPage() {
     }
   };
 
+  // ── Voice mode ──────────────────────────────────────────────────────
+  if (mode === "voice") {
+    return <VoiceChatView onSwitchToText={() => setMode("text")} />;
+  }
+
+  // ── Text mode (default) ─────────────────────────────────────────────
   return (
     <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full">
       {/* ── Message List ────────────────────────────────────────────────── */}
@@ -146,7 +156,37 @@ export default function ChatPage() {
       </div>
 
       {/* ── Input Area ──────────────────────────────────────────────────── */}
-      <ChatInput onSend={sendMessage} disabled={isLoading} />
+      <div className="relative">
+        <ChatInput onSend={sendMessage} disabled={isLoading} />
+
+        {/* Voice mode toggle */}
+        <button
+          onClick={() => setMode("voice")}
+          className="absolute right-20 bottom-10 w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:scale-105"
+          style={{
+            background: "var(--revelai-bg)",
+            border: "1px solid var(--revelai-border)",
+          }}
+          aria-label="Switch to voice mode"
+          title="Switch to voice mode"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--revelai-purple)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
