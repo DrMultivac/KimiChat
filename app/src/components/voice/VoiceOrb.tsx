@@ -12,17 +12,25 @@ interface VoiceOrbProps {
 }
 
 /**
- * Animated voice orb with four states:
- * - idle: gentle breathing/pulsing
+ * Animated voice orb with four states and smooth transitions:
+ * - idle: gentle breathing/pulsing with subtle listening indicator
  * - listening: expanded with sound wave ripples
  * - thinking: slow rotation with sparkle particles
  * - speaking: rhythmic pulsing driven by audio analyser
+ *
+ * The orb is ALWAYS tappable (even during speaking for barge-in).
+ * Transitions between states are smoothly animated.
  */
 export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
   const timeRef = useRef(0);
   const particlesRef = useRef<Particle[]>([]);
+  // Smoothly interpolated radius & glow for transitions
+  const smoothRadiusRef = useRef(80);
+  const smoothGlowRef = useRef(0.2);
+  const prevStateRef = useRef<OrbState>(state);
+  const transitionRef = useRef(0); // 0-1 progress of state transition
 
   interface Particle {
     x: number;
@@ -47,11 +55,19 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
         life: 0,
         maxLife: 60 + Math.random() * 60,
         size: 1.5 + Math.random() * 2.5,
-        hue: 250 + Math.random() * 30, // Purple hues
+        hue: 250 + Math.random() * 30,
       };
     },
     []
   );
+
+  // Track state transitions
+  useEffect(() => {
+    if (prevStateRef.current !== state) {
+      prevStateRef.current = state;
+      transitionRef.current = 0;
+    }
+  }, [state]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -60,7 +76,6 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // High DPI support
     const dpr = window.devicePixelRatio || 1;
     const size = 280;
     canvas.width = size * dpr;
@@ -75,10 +90,15 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
     let lastTime = performance.now();
 
     const draw = (now: number) => {
-      const dt = (now - lastTime) / 16.67; // Normalize to ~60fps
+      const dt = (now - lastTime) / 16.67;
       lastTime = now;
       timeRef.current += dt * 0.02;
       const t = timeRef.current;
+
+      // Advance transition progress
+      if (transitionRef.current < 1) {
+        transitionRef.current = Math.min(1, transitionRef.current + dt * 0.06);
+      }
 
       ctx.clearRect(0, 0, size, size);
 
@@ -94,30 +114,38 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
         }
       }
 
-      // Calculate dynamic radius
-      let radius = baseRadius;
-      let glowIntensity = 0.3;
+      // Calculate target radius & glow
+      let targetRadius = baseRadius;
+      let targetGlow = 0.3;
       let innerPulse = 0;
 
       switch (state) {
         case "idle":
-          radius = baseRadius + Math.sin(t * 1.5) * 4;
-          glowIntensity = 0.2 + Math.sin(t * 1.5) * 0.1;
+          targetRadius = baseRadius + Math.sin(t * 1.5) * 4;
+          targetGlow = 0.2 + Math.sin(t * 1.5) * 0.1;
           break;
         case "listening":
-          radius = baseRadius + 8 + Math.sin(t * 3) * 3;
-          glowIntensity = 0.5 + Math.sin(t * 2) * 0.15;
+          targetRadius = baseRadius + 8 + Math.sin(t * 3) * 3;
+          targetGlow = 0.5 + Math.sin(t * 2) * 0.15;
           break;
         case "thinking":
-          radius = baseRadius + Math.sin(t * 2) * 3;
-          glowIntensity = 0.35 + Math.sin(t * 3) * 0.1;
+          targetRadius = baseRadius + Math.sin(t * 2) * 3;
+          targetGlow = 0.35 + Math.sin(t * 3) * 0.1;
           break;
         case "speaking":
-          radius = baseRadius + audioLevel * 25 + Math.sin(t * 4) * 2;
-          glowIntensity = 0.4 + audioLevel * 0.4;
+          targetRadius = baseRadius + audioLevel * 25 + Math.sin(t * 4) * 2;
+          targetGlow = 0.4 + audioLevel * 0.4;
           innerPulse = audioLevel;
           break;
       }
+
+      // Smooth interpolation for fluid transitions
+      const lerpSpeed = 0.12 * dt;
+      smoothRadiusRef.current += (targetRadius - smoothRadiusRef.current) * lerpSpeed;
+      smoothGlowRef.current += (targetGlow - smoothGlowRef.current) * lerpSpeed;
+
+      const radius = smoothRadiusRef.current;
+      const glowIntensity = smoothGlowRef.current;
 
       // ── Outer glow layers ──────────────────────────────────────────
       for (let i = 3; i >= 0; i--) {
@@ -138,16 +166,27 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
 
       // ── Listening: wave ripples emanating outward ──────────────────
       if (state === "listening") {
+        const rippleAlphaMultiplier = Math.min(1, transitionRef.current * 2);
         for (let w = 0; w < 3; w++) {
           const wavePhase = (t * 2 + w * 2.1) % 6.28;
           const waveRadius = radius + 10 + (wavePhase / 6.28) * 50;
-          const waveAlpha = Math.max(0, 0.25 - (wavePhase / 6.28) * 0.25);
+          const waveAlpha = Math.max(0, 0.25 - (wavePhase / 6.28) * 0.25) * rippleAlphaMultiplier;
           ctx.beginPath();
           ctx.arc(cx, cy, waveRadius, 0, Math.PI * 2);
           ctx.strokeStyle = `rgba(91, 79, 176, ${waveAlpha})`;
           ctx.lineWidth = 2;
           ctx.stroke();
         }
+      }
+
+      // ── Idle: subtle listening indicator (very faint pulse ring) ───
+      if (state === "idle") {
+        const pulseAlpha = 0.06 + Math.sin(t * 1.2) * 0.03;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius + 14, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(91, 79, 176, ${pulseAlpha})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
 
       // ── Main orb body ─────────────────────────────────────────────
@@ -220,12 +259,10 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
 
       // ── Thinking: sparkle particles ───────────────────────────────
       if (state === "thinking") {
-        // Spawn new particles
         if (Math.random() < 0.3 * dt) {
           particlesRef.current.push(createParticle(cx, cy, radius));
         }
 
-        // Draw rotating ring
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(t * 0.5);
@@ -257,7 +294,6 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
         ctx.fillStyle = `hsla(${p.hue}, 60%, 75%, ${alpha * 0.8})`;
         ctx.fill();
 
-        // Sparkle cross
         if (p.size > 2.5) {
           const sLen = p.size * 1.5 * alpha;
           ctx.strokeStyle = `hsla(${p.hue}, 50%, 85%, ${alpha * 0.4})`;
@@ -273,11 +309,6 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
         return true;
       });
 
-      // Clear particles when leaving thinking state
-      if (state !== "thinking" && particlesRef.current.length === 0) {
-        // Already clean
-      }
-
       animFrameRef.current = requestAnimationFrame(draw);
     };
 
@@ -292,14 +323,14 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
     idle: "Tap to speak",
     listening: "Listening...",
     thinking: "Thinking...",
-    speaking: "Speaking...",
+    speaking: "Tap to interrupt",
   };
 
   return (
     <div className="flex flex-col items-center gap-4">
       <button
         onClick={onTap}
-        disabled={disabled || state === "thinking" || state === "speaking"}
+        disabled={disabled || state === "thinking"}
         className="relative focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-4 rounded-full transition-transform active:scale-95"
         style={{
           focusVisibleRingColor: "var(--revelai-purple)",
@@ -309,10 +340,12 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
             ? "Start voice input"
             : state === "listening"
               ? "Stop listening"
-              : stateLabel[state]
+              : state === "speaking"
+                ? "Interrupt KIMI"
+                : stateLabel[state]
         }
         role="switch"
-        aria-checked={state === "listening"}
+        aria-checked={state === "listening" || state === "speaking"}
       >
         <canvas
           ref={canvasRef}
@@ -362,12 +395,31 @@ export function VoiceOrb({ state, onTap, getAnalyser, disabled }: VoiceOrbProps)
               style={{ animation: "spin 1s linear infinite" }}
             />
           )}
+          {state === "speaking" && (
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="opacity-50"
+              style={{ animation: "fadeInOut 2s ease-in-out infinite" }}
+            >
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          )}
         </div>
       </button>
 
       {/* State label */}
       <p
-        className="text-sm font-medium tracking-wide"
+        className="text-sm font-medium tracking-wide transition-opacity duration-300"
         style={{ color: "var(--revelai-text-muted)" }}
         aria-live="polite"
       >

@@ -88,3 +88,16 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+/* ── FormattedText styles ─────────────────────────────────────────────── */
+.formatted-text p { margin: 0; }
+.formatted-text p + p { margin-top: 0.75rem; }
+.formatted-text strong { font-weight: 600; }
+.formatted-text em { font-style: italic; }
+.formatted-text ul, .formatted-text ol { margin: 0.375rem 0; }
+.formatted-text li { line-height: 1.6; }

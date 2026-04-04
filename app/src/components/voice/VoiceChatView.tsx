@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { VoiceOrb, OrbState } from "./VoiceOrb";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import { stripMarkdown } from "@/lib/format-text";
+import { FormattedText } from "@/components/ui/FormattedText";
 
 interface Message {
   id: string;
@@ -27,10 +29,12 @@ const WELCOME_MESSAGE: Message = {
 export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [orbState, setOrbState] = useState<OrbState>("idle");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [sessionType] = useState<string>("intake");
+  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Scroll transcript to bottom
   const scrollTranscript = useCallback(() => {
@@ -41,20 +45,45 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
     scrollTranscript();
   }, [messages, scrollTranscript]);
 
-  // TTS hook
+  // ── TTS hook ────────────────────────────────────────────────────────
   const tts = useTextToSpeech({
     onStart: () => setOrbState("speaking"),
-    onEnd: () => setOrbState("idle"),
+    onEnd: () => {
+      // After KIMI finishes speaking, go back to listening if voice session is active
+      if (voiceSessionActive) {
+        setOrbState("listening");
+        stt.resetTranscript();
+      } else {
+        setOrbState("idle");
+      }
+    },
     onError: (err) => {
       console.error("[Voice] TTS error:", err);
-      setOrbState("idle");
+      if (voiceSessionActive) {
+        setOrbState("listening");
+      } else {
+        setOrbState("idle");
+      }
     },
   });
 
-  // Send message to chat API
+  // ── Barge-in: interrupt KIMI ────────────────────────────────────────
+  const handleBargeIn = useCallback(() => {
+    // Stop TTS playback
+    tts.stopSpeaking();
+    // Abort any in-flight streaming request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    setOrbState("listening");
+  }, [tts]);
+
+  // ── Send message via streaming SSE endpoint ─────────────────────────
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!content.trim() || isLoading) return;
+      if (!content.trim() || isProcessing) return;
 
       const userMessage: Message = {
         id: `user_${Date.now()}`,
@@ -64,12 +93,17 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
       };
 
       setMessages((prev) => [...prev, userMessage]);
-      setIsLoading(true);
+      setIsProcessing(true);
       setOrbState("thinking");
+
+      // Create abort controller for this request
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
       try {
         const allMessages = [...messages, userMessage];
-        const response = await fetch("/api/chat", {
+
+        const response = await fetch("/api/chat-stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -79,26 +113,106 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
             })),
             sessionType,
           }),
+          signal: abortController.signal,
         });
 
-        if (!response.ok) throw new Error("Chat request failed");
+        if (!response.ok) throw new Error("Chat stream request failed");
 
-        const data = await response.json();
-        const assistantContent = data.message.content;
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-        const assistantMessage: Message = {
-          id: `assistant_${Date.now()}`,
-          role: "assistant",
-          content: assistantContent,
-          timestamp: data.message.timestamp,
-        };
+        const decoder = new TextDecoder();
+        let fullText = "";
+        let sseBuffer = "";
 
-        setMessages((prev) => [...prev, assistantMessage]);
+        // Create a placeholder assistant message that we update as chunks arrive
+        const assistantMsgId = `assistant_${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantMsgId,
+            role: "assistant",
+            content: "",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
 
-        // Speak the response via TTS
-        tts.speak(assistantContent);
+        // Read SSE stream
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from buffer
+          const lines = sseBuffer.split("\n");
+          sseBuffer = "";
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.type === "chunk") {
+                  fullText += (fullText ? " " : "") + data.text;
+
+                  // Update the assistant message in real time
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMsgId
+                        ? { ...m, content: fullText }
+                        : m
+                    )
+                  );
+
+                  // Send chunk to TTS (strip markdown for voice)
+                  const cleanText = stripMarkdown(data.text);
+                  if (cleanText.trim()) {
+                    tts.speakChunked(cleanText);
+                  }
+                } else if (data.type === "done") {
+                  // Final full text -- ensure message is complete
+                  if (data.fullText) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMsgId
+                          ? { ...m, content: data.fullText }
+                          : m
+                      )
+                    );
+                  }
+                  tts.flushQueue();
+                } else if (data.type === "error") {
+                  throw new Error(data.message);
+                }
+                // "components" type: UI components from tool phase
+                // (could be handled here for PROM cards, etc.)
+              } catch (parseErr) {
+                // If JSON parse fails, this line might be incomplete.
+                // Put it back in the buffer for next iteration.
+                if (i === lines.length - 1) {
+                  sseBuffer = line;
+                }
+              }
+            } else if (line === "") {
+              // Empty line = SSE event separator, ignore
+            } else {
+              // Incomplete line, put back in buffer
+              if (i === lines.length - 1) {
+                sseBuffer = line;
+              }
+            }
+          }
+        }
       } catch (error) {
-        console.error("[Voice] Chat error:", error);
+        if ((error as Error).name === "AbortError") {
+          // Barge-in abort -- expected, not an error
+          return;
+        }
+        console.error("[Voice] Chat stream error:", error);
         const errMsg: Message = {
           id: `error_${Date.now()}`,
           role: "assistant",
@@ -107,55 +221,91 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
           timestamp: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, errMsg]);
-        setOrbState("idle");
+        setOrbState(voiceSessionActive ? "listening" : "idle");
       } finally {
-        setIsLoading(false);
+        setIsProcessing(false);
+        abortControllerRef.current = null;
       }
     },
-    [messages, isLoading, sessionType, tts]
+    [messages, isProcessing, sessionType, tts, voiceSessionActive]
   );
 
-  // Speech recognition hook
+  // ── Speech recognition hook with barge-in ──────────────────────────
   const stt = useSpeechRecognition({
     onResult: () => {
-      // interim updates — orb stays in listening state
+      // Interim updates -- orb stays in listening state
+    },
+    onInterimResult: (interim) => {
+      // If KIMI is speaking and user starts talking, barge in
+      if (
+        (orbState === "speaking" || isProcessing) &&
+        interim.trim().length > 2
+      ) {
+        handleBargeIn();
+      }
     },
     onFinalResult: (transcript) => {
       sendMessage(transcript);
     },
     onError: (err) => {
       console.error("[Voice] STT error:", err);
-      setOrbState("idle");
+      if (!voiceSessionActive) {
+        setOrbState("idle");
+      }
     },
+    continuous: true,
   });
 
-  // Handle orb tap
+  // ── Handle orb tap ──────────────────────────────────────────────────
   const handleOrbTap = useCallback(() => {
-    if (orbState === "idle") {
-      stt.toggleListening();
+    if (orbState === "speaking") {
+      // Barge-in: user taps while KIMI is speaking
+      handleBargeIn();
+      stt.resetTranscript();
+      return;
+    }
+
+    if (orbState === "idle" && !voiceSessionActive) {
+      // First tap: start voice session with continuous listening
+      setVoiceSessionActive(true);
+      stt.startContinuous();
       setOrbState("listening");
     } else if (orbState === "listening") {
-      stt.toggleListening();
-      // If there's a transcript, it will be sent via onFinalResult
-      // Otherwise go back to idle
-      if (!stt.transcript.trim()) {
+      // Tap while listening: submit what we have or go idle
+      const currentText = stt.transcript.trim();
+      if (currentText) {
+        sendMessage(currentText);
+        stt.resetTranscript();
+      } else {
+        // Stop the voice session
+        stt.stopListening();
+        setVoiceSessionActive(false);
         setOrbState("idle");
       }
+    } else if (orbState === "idle" && voiceSessionActive) {
+      // Resume listening in an active session
+      stt.startContinuous();
+      setOrbState("listening");
     }
-  }, [orbState, stt]);
+  }, [orbState, voiceSessionActive, stt, sendMessage, handleBargeIn]);
 
-  // Sync STT listening state with orb
+  // ── Sync STT listening state with orb ───────────────────────────────
   useEffect(() => {
-    if (!stt.isListening && orbState === "listening") {
-      // STT ended naturally (silence detection or manual stop)
-      // If thinking/speaking will be set by sendMessage
-      if (!isLoading) {
+    if (
+      !stt.isListening &&
+      orbState === "listening" &&
+      !isProcessing
+    ) {
+      // STT ended unexpectedly -- restart if session is active
+      if (voiceSessionActive) {
+        stt.startContinuous();
+      } else {
         setOrbState("idle");
       }
     }
-  }, [stt.isListening, orbState, isLoading]);
+  }, [stt.isListening, orbState, isProcessing, voiceSessionActive, stt]);
 
-  // Handle text input submit
+  // ── Handle text input submit ────────────────────────────────────────
   const handleTextSubmit = () => {
     if (textInput.trim()) {
       sendMessage(textInput);
@@ -171,7 +321,7 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
           state={orbState}
           onTap={handleOrbTap}
           getAnalyser={tts.getAnalyser}
-          disabled={isLoading && orbState !== "thinking" && orbState !== "speaking"}
+          disabled={orbState === "thinking"}
         />
 
         {/* Real-time transcript while listening */}
@@ -239,7 +389,11 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
                   boxShadow: "var(--shadow-sm)",
                 }}
               >
-                {msg.content}
+                {msg.role === "assistant" ? (
+                  <FormattedText text={msg.content} />
+                ) : (
+                  msg.content
+                )}
               </div>
             </div>
           ))}
@@ -277,7 +431,7 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
                   }
                 }}
                 placeholder="Type a message..."
-                disabled={isLoading}
+                disabled={isProcessing}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-gray-400"
                 style={{ color: "var(--revelai-text)" }}
                 aria-label="Text message input"
@@ -287,14 +441,14 @@ export function VoiceChatView({ onSwitchToText }: VoiceChatViewProps) {
             {/* Send button */}
             <button
               onClick={handleTextSubmit}
-              disabled={isLoading || !textInput.trim()}
+              disabled={isProcessing || !textInput.trim()}
               className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all"
               style={{
                 background:
-                  textInput.trim() && !isLoading
+                  textInput.trim() && !isProcessing
                     ? "linear-gradient(135deg, var(--revelai-purple), var(--revelai-purple-dark))"
                     : "var(--revelai-border)",
-                cursor: textInput.trim() && !isLoading ? "pointer" : "not-allowed",
+                cursor: textInput.trim() && !isProcessing ? "pointer" : "not-allowed",
               }}
               aria-label="Send message"
             >

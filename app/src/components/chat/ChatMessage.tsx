@@ -1,5 +1,7 @@
 "use client";
 
+import { FormattedText } from "@/components/ui/FormattedText";
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -38,23 +40,28 @@ export function ChatMessage({ message }: { message: Message }) {
             borderBottomRightRadius: isAssistant ? "16px" : "4px",
           }}
         >
-          {/* Render paragraphs */}
-          {message.content.split("\n\n").map((paragraph, i) => (
-            <p
-              key={i}
-              className={`text-sm leading-relaxed ${i > 0 ? "mt-3" : ""}`}
-              style={{
-                opacity: isAssistant ? 0.92 : 0.95,
-              }}
-            >
-              {paragraph.split("\n").map((line, j) => (
-                <span key={j}>
-                  {j > 0 && <br />}
-                  {line}
-                </span>
-              ))}
-            </p>
-          ))}
+          {isAssistant ? (
+            <FormattedText
+              text={message.content}
+              className={isAssistant ? "opacity-[0.92]" : "opacity-[0.95]"}
+            />
+          ) : (
+            /* User messages: render as plain paragraphs */
+            message.content.split("\n\n").map((paragraph, i) => (
+              <p
+                key={i}
+                className={`text-sm leading-relaxed ${i > 0 ? "mt-3" : ""}`}
+                style={{ opacity: 0.95 }}
+              >
+                {paragraph.split("\n").map((line, j) => (
+                  <span key={j}>
+                    {j > 0 && <br />}
+                    {line}
+                  </span>
+                ))}
+              </p>
+            ))
+          )}
 
           {/* Timestamp */}
           <p
